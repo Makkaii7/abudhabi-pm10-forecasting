@@ -3,8 +3,6 @@
 COSC 621 course project. We predict tomorrow's PM10 (dust and other particles in the air) at the
 Abu Dhabi air quality stations. One shared repository, so that everyone works on the same data file.
 
-We start small: the first model uses the pollution data only, no weather.
-
 ## The map
 
 ```
