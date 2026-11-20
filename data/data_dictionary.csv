@@ -1,0 +1,17 @@
+column_or_group,meaning,use_or_caution
+station_id,Monitoring station identifier,Join key; categorical/identifier
+station,Station label from daily source,Station descriptor
+station_metadata_name,Station label from station metadata,Metadata reference
+day,Daily observation date,Time index
+"lat, lon",Station coordinates,Geographic metadata
+"PM10, NO2, SO2, O3, CO",Daily mean concentration by pollutant,Main pollutant measurements; unit not present in daily CSV
+*_max,Daily maximum by pollutant,Supporting descriptive measurement
+*_readings,Number of contributing readings,Measurement-support indicator
+*_low_support_flag,Fewer than 12 readings or missing reading count,Quality flag; does not delete the value
+*_negative_mean_flag,Negative reported daily mean,Review flag
+"year, month, day_of_month, day_of_week, day_of_year",Calendar fields derived from date,Descriptive temporal features
+"month_sin/cos, day_of_year_sin/cos",Cyclic calendar encodings,Optional temporal descriptors
+n_pollutants_available,Number of pollutant means present for station-day,Coverage indicator
+n_pollutants_low_support,Number of pollutants with low-support flags,Quality indicator
+all_five_pollutants_available,All five daily means are present,Coverage indicator
+any_low_support_flag,At least one pollutant has low reading support,Quality indicator
