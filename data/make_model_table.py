@@ -9,6 +9,20 @@ Columns:
   no2_today, so2_today           today's NO2 and SO2 daily averages
   pm10_tomorrow                  the answer: tomorrow's PM10 daily average
   split                          train, validation or test
+  humidity_today                 today's average relative humidity, in percent
+  wind_speed_today               today's average wind speed 10 m above the ground, in km/h
+  pressure_today                 today's average air pressure (at sea level), in hPa
+  pm10_high_today                1 if today's PM10 is above 150, otherwise 0
+  pm10_spike_today               1 if today is a local PM10 spike at this station, otherwise 0
+
+The last five columns were added later, at the end of the table. The rows, the split and the first
+14 columns are exactly as before.
+
+The three weather columns come from the ERA5 weather file (openaq_station_weather_ERA5_daily.csv).
+The two flags come from the spike list (pm10_spikes.csv). Run find_spikes.py first: it makes that list.
+
+All five describe today, so a model may use them. There is no flag for tomorrow, on purpose: it would
+be made from tomorrow's PM10, and that is the answer.
 
 A row is kept only when nothing in it is missing. A daily average counts as known when the station has
 18 or more of the 24 hourly readings that day. So PM10 must be known on all seven days and on the next
@@ -28,6 +42,8 @@ import pandas as pd
 
 HERE = Path(__file__).parent                     # the folder this script is in
 DAILY_FILE = HERE / "openaq_daily_all_stations.csv"
+WEATHER_FILE = HERE / "openaq_station_weather_ERA5_daily.csv"    # one row per station and day
+SPIKE_FILE = HERE / "pm10_spikes.csv"                            # one row per station and day, made by find_spikes.py
 OUT_FILE = HERE / "model_table.csv"
 
 FULL_DAY = 18                                    # hourly readings needed to trust a daily average
@@ -66,6 +82,23 @@ def split_of(day):
     return "train"
 
 
+def weather_of_today():
+    """Humidity, wind speed and pressure of every station and day, under the names used in the table."""
+    weather = pd.read_csv(WEATHER_FILE, parse_dates=["day"])
+    new_names = {"humidity_mean": "humidity_today", "wind_speed_mean": "wind_speed_today",
+                 "pressure_mean": "pressure_today"}
+    return weather[["station_id", "day"] + list(new_names)].rename(columns=new_names)
+
+
+def spike_flags_of_today():
+    """The two PM10 flags of every station and day, written as 1 (yes) or 0 (no)."""
+    spikes = pd.read_csv(SPIKE_FILE, parse_dates=["day"])
+    flags = spikes[["station_id", "day"]].copy()
+    flags["pm10_high_today"] = spikes["high_day"].astype(int)
+    flags["pm10_spike_today"] = spikes["local_spike"].astype(int)
+    return flags
+
+
 # ---- 1. read the daily file and keep the daily averages we can trust
 daily = pd.read_csv(DAILY_FILE, parse_dates=["day"])
 names = daily.drop_duplicates("station_id").set_index("station_id")["station"]
@@ -80,15 +113,25 @@ for station_id in averages.index.get_level_values("station_id").unique():
     parts.append(rows)
 table = pd.concat(parts, ignore_index=True)
 table["split"] = table["day"].apply(split_of)
+
+# ---- 3. add today's weather and today's flags at the end. The rows stay the same.
+rows_before = len(table)
+table = table.merge(weather_of_today(), on=["station_id", "day"], how="left")
+table = table.merge(spike_flags_of_today(), on=["station_id", "day"], how="left")
+if len(table) != rows_before or table.isna().any().any():
+    raise SystemExit("The weather file or the spike list does not cover every row. Nothing was saved.")
+flag_columns = ["pm10_high_today", "pm10_spike_today"]
+table[flag_columns] = table[flag_columns].astype(int)
 table = table.round(2)
 
-# ---- 3. save
+# ---- 4. save
 table.to_csv(OUT_FILE, index=False)
 print(f"saved {OUT_FILE.name}: {len(table)} rows, {table['station_id'].nunique()} stations")
 print("columns:", list(table.columns))
 
-# ---- 4. checks
+# ---- 5. checks
 print("\nempty cells:", int(table.isna().sum().sum()))
 summary = table.groupby("split").agg(rows=("day", "size"), days=("day", "nunique"),
-                                     first_day=("day", "min"), last_day=("day", "max"))
+                                     first_day=("day", "min"), last_day=("day", "max"),
+                                     high_days=("pm10_high_today", "sum"), spike_days=("pm10_spike_today", "sum"))
 print(summary.loc[["train", "validation", "test"]].to_string())
